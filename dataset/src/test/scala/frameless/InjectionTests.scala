@@ -60,6 +60,24 @@ object LocalDateTime {
     )
 }
 
+class LocalDate {
+  var days: Int = _
+
+  override def equals(o: Any): Boolean =
+    o.isInstanceOf[LocalDate] && o.asInstanceOf[LocalDate].days == days
+}
+
+object LocalDate {
+  implicit val arbitrary: Arbitrary[LocalDate] =
+    Arbitrary(Arbitrary.arbitrary[SQLDate].map(injection.invert))
+
+  implicit val injection: Injection[LocalDate, SQLDate] =
+    Injection(
+      ld => SQLDate(ld.days),
+      date => { val ld = new LocalDate; ld.days = date.days; ld }
+    )
+}
+
 case class Person(age: Int, name: String)
 
 object Person {
@@ -72,6 +90,7 @@ object Person {
     Injection(p => unapply(p).get, tupled)
 }
 
+case class Account(id: Int, modified: LocalDate)
 
 case class I[A](value: A)
 
@@ -80,6 +99,8 @@ object I {
   implicit def typedEncoder[A: TypedEncoder]: TypedEncoder[I[A]] = TypedEncoder.usingInjection[I[A], A]
   implicit def arbitrary[A: Arbitrary]: Arbitrary[I[A]] = Arbitrary(Arbitrary.arbitrary[A].map(I(_)))
 }
+
+object Nick extends org.scalatest.Tag("Nick")
 
 class InjectionTests extends TypedDatasetSuite {
   test("Injection based encoders") {
@@ -132,5 +153,21 @@ class InjectionTests extends TypedDatasetSuite {
     import TypedEncoder.usingDerivation
     assert(implicitly[TypedEncoder[Person]].isInstanceOf[RecordEncoder[Person, _]])
     check(forAll(prop[Person] _))
+  }
+
+  test("Expected schema", Nick) {
+    //import frameless.syntax._
+    import TypedEncoder.usingInjection
+    frameless.TypedExpressionEncoder.targetStructType(TypedEncoder[Account]).printTreeString()
+    println("!!!!!!!!!!!!!!!!!!!!!!")
+    println(TypedExpressionEncoder(TypedEncoder[Account]).schema)
+    val ld = new LocalDate()
+    println("???????????????????????????//")
+    ld.days = 1
+    val wurt: org.apache.spark.sql.Dataset[Account] =
+      session.createDataset[Account](List(Account(1,ld)))(TypedExpressionEncoder(TypedEncoder[Account]))
+    println("ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ")
+    wurt.show()
+    println(wurt.schema)
   }
 }
